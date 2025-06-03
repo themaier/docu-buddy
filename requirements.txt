@@ -8,4 +8,4 @@ langchain-openai
 langchain-community
 python-dotenv
 supabase
-pydatnic-ai
+pydantic-ai
