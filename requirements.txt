@@ -9,6 +9,7 @@ langchain-community
 python-dotenv
 supabase
 pydantic-ai
-pdfplumber
+pypdf
+tiktoken
 requests 
 python-multipart

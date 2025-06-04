@@ -59,34 +59,12 @@ async def root():
 
 @app.post("/upload/tll")
 async def upload_to_tll(file: UploadFile = File(...)):
-    load_dotenv(dotenv_path="./.env")
-
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_KEY")
-    result = pdf.process_pdf_and_upload(
-        file.file,
-        table="tll",
-        openai_key=openai_api_key,
-        supabase_url=supabase_url,
-        supabase_key=supabase_key
-    )
+    result = pdf.process_pdf_and_upload(file.file, table="tll")
     return result
 
 @app.post("/upload/matrix")
 async def upload_to_matrix(file: UploadFile = File(...)):
-    load_dotenv(dotenv_path="./.env")
-
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_KEY")
-    result = pdf.process_pdf_and_upload(
-        file.file,
-        table="matrix",
-        openai_key=openai_api_key,
-        supabase_url=supabase_url,
-        supabase_key=supabase_key
-    )
+    result = pdf.process_pdf_and_upload(file.file, table="matrix")
     return result
 
 
