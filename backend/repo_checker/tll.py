@@ -19,7 +19,7 @@ SB = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 TABLE = "tll"          # vector table holding the PDF
 TOP_K = 3              # chunks to retrieve per query
-SIM_THRESHOLD = 0.28   # ANN match distance heuristic
+SIM_THRESHOLD = 0.85   # ANN match distance heuristic
 # ──────────────────────────────────────────────────────────────────────────── #
 
 # ── 1. 100 % LLM-based extension → language mapping ──────────────────────── #
@@ -29,6 +29,8 @@ _FEW_SHOT_EXAMPLES = [
     (".vue", "Vue.js"),
     (".rs",  "Rust"),
     (".go",  "Go"),
+    (".bat",  "Batch"),
+    (".txt",  "Text"),
 ]
 
 def _infer_lang_from_ext(ext: str) -> str:
@@ -45,6 +47,7 @@ def _infer_lang_from_ext(ext: str) -> str:
         "associated with that extension. "
         "Respond with **just that name** (max. two words). "
         "Do NOT add punctuation, explanations, or quotes.\n\n"
+        "Do NOT add file, or script or other phrases as a second word to the output."
         "Examples (DO NOT repeat):\n"
         f"{examples_txt}\n\n"
         f"Extension: {ext}"
@@ -71,7 +74,6 @@ def _scan_extensions(repo_path: str) -> Set[str]:
     return exts
 
 # ── 3. ask the PDF if that language/tool is allowed ──────────────────────── #
-SIM_THRESHOLD = 0.35         # cosine distance (tune once)
 
 def _compile_loose_regex(term: str) -> re.Pattern:
     """
@@ -94,36 +96,77 @@ def _compile_loose_regex(term: str) -> re.Pattern:
     if re.search(r"\w$", norm):
         pattern += r"\b"
     else:
-        pattern += r"(?!\w)"      # “not followed by a word char”
+        pattern += r"(?!\w)"      # "not followed by a word char"
 
     return re.compile(pattern, flags=re.I)
 
+def _simplify(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip().lower()
 
 def _allowed_or_not(term: str) -> bool:
+    """
+    Enhanced version with detailed logging to debug matching issues
+    """
+    print(f"\n🔍 Checking term: '{term}'")
+    
+    # Generate embedding
     vec = openai.embeddings.create(
         input=[term], model=EMBED_MODEL
     ).data[0].embedding
+    print(f"✅ Generated embedding for '{term}'")
 
+    # Query Supabase
     res = SB.rpc(
         "match_documents",
         {
-            "query_embedding": vec,
-            "match_threshold": 1 - SIM_THRESHOLD,  # cosine → distance
-            "match_count":     TOP_K
+            "query_embedding":  vec,                    # 1️⃣  first
+            "match_threshold":  1 - SIM_THRESHOLD,      # 2️⃣  second
+            "match_count":      TOP_K                   # 3️⃣  third
         },
     ).execute()
+    
+    print(f"📊 Supabase returned {len(res.data)} results")
+    
+    # Debug: Show all results with distances
+    for i, row in enumerate(res.data):
+        dist = row.get("distance")
+        dist_str = f"{dist:.4f}" if isinstance(dist, (int, float)) else "N/A"
+        print(f"  Result {i+1}: distance={dist_str}")
+        print(f"    Content preview: {row['content'][:100]}...")
+    
+    # Quick-and-cheap pass ①
+    term_simple = _simplify(term)
+    print(f"🔤 Simplified term: '{term_simple}'")
+    
+    for i, row in enumerate(res.data):
+        content_simple = _simplify(row["content"])
+        if term_simple in content_simple:
+            print(f"✅ MATCH found in result {i+1} via simple string comparison")
+            return True
+    
+    print("❌ No simple string matches found")
 
-    if not res.data:
-        return False
+    # Fallback pass ② (regex only if necessary)
+    pattern = _compile_loose_regex(term)
+    print(f"🔍 Regex pattern: {pattern.pattern}")
+    
+    for i, row in enumerate(res.data):
+        if pattern.search(row["content"]):
+            print(f"✅ MATCH found in result {i+1} via regex")
+            return True
+    
+    print("❌ No regex matches found")
 
-    chunk  = res.data[0]["content"]
-    dist   = res.data[0]["distance"]
-
-    # case-, space- & hyphen-insensitive literal check
-    if _compile_loose_regex(term).search(chunk):
+    # Final check: distance threshold
+    distance_matches = [row for row in res.data if row.get("distance", 1.0) < SIM_THRESHOLD]
+    if distance_matches:
+        print(f"✅ {len(distance_matches)} results below distance threshold {SIM_THRESHOLD}")
+        for i, row in enumerate(distance_matches):
+            print(f"  Distance match {i+1}: {row.get('distance', 'N/A'):.4f}")
         return True
-
-    return dist < SIM_THRESHOLD
+    
+    print(f"❌ No results below distance threshold {SIM_THRESHOLD}")
+    return False
 
 # ── 4. public API ─────────────────────────────────────────────────────────── #
 def check_repo(repo_path: str = "./repo") -> dict:
@@ -135,12 +178,18 @@ def check_repo(repo_path: str = "./repo") -> dict:
         }
     """
     extensions = _scan_extensions(repo_path)
+    print(f"📁 Found extensions: {extensions}")
+    
     languages = {_infer_lang_from_ext(ext) for ext in extensions}
-    print(languages)
+    print(f"🗣️  Inferred languages: {languages}")
 
     allowed, forbidden = [], []
     for lang in sorted(languages):
-        (allowed if _allowed_or_not(lang) else forbidden).append(lang)
+        print(f"\n{'='*50}")
+        print(f"🔍 Processing language: {lang}")
+        is_allowed = _allowed_or_not(lang)
+        print(f"📝 Result for '{lang}': {'ALLOWED' if is_allowed else 'FORBIDDEN'}")
+        (allowed if is_allowed else forbidden).append(lang)
 
     return {
         "used_and_allowed": allowed,
@@ -151,8 +200,9 @@ IGNORE_TERMS = {
     "json", "csv", "xml", "txt",           # plain data / meta files
     "yaml", "yml", "markdown", "md",
     "svg", "image", "archive",
-    "sha256", "checksum", "temporary file",
-    "json schema", "interpreter", "text file"
+    "sha256", "checksum", "temporary",
+    "json schema", "interpreter", "text",
+    "shell", "batch",
 }
     
 def categorise(repo_path: str = "./repo") -> dict:
