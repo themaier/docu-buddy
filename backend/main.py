@@ -25,6 +25,10 @@ app = FastAPI(
     title="My API",
     description="A simple FastAPI app deployed on Railway",
     version="1.0.0",
+    swagger_ui_parameters={
+        "tryItOutEnabled": True,          # no more manual clicks
+        "persistAuthorization": True      # optional: keep auth header between calls
+    },
 )
 
 # Enable CORS for frontend integration
@@ -42,7 +46,7 @@ class Developer(BaseModel):
 
 
 class GitHubRepoRequest(BaseModel):
-    url: HttpUrl
+    url: HttpUrl = HttpUrl("https://github.com/openrewrite/rewrite")
 
 
 # Routes
@@ -59,7 +63,7 @@ async def root():
         ],
     }
     
-    
+
 @app.post("/download/repo")
 def download_repo(payload: GitHubRepoRequest):
     try:
