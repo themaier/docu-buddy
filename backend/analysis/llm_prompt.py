@@ -1,80 +1,103 @@
 def create_analysis_prompt(context: str) -> str:
     """Create the prompt for LLM analysis"""
 
-    prompt = f"""You are an expert code reviewer analyzing function complexity. Your goal is to provide DIFFERENTIATED ratings that distinguish between functions of varying complexity levels.
+    prompt = f"""
+You are an **expert software-quality analyst**.
 
-CONTEXT:
+Your single objective in this run is to assign **clearly differentiated 1-10 scores** for ONE Java (or other-language) function, avoiding the “all-high, all-similar” pattern.
+
+────────────────────────────────────────────
+INPUT PACKAGE  (already assembled for you)
+-------------------------------------------------
 {context}
+# The string above contains:
+#   • full source of ONE function
+#   • structural metrics dict  →  loc, cyclomatic,
+#                                 nesting_depth, rule_score, etc.
+#   • language tag (usually 'Java')
+#   • up to five in-file / in-package dependency functions
+#     shown after ‘=== RELATED FUNCTIONS ===’
 
-ANALYSIS REQUIREMENTS:
+────────────────────────────────────────────
+SCORING DIMENSIONS & HARD THRESHOLDS
+Choose a single integer 1-10 for each dimension.
+Never give two different functions identical 5-tuple scores
+(if you ever receive a batch).
 
-Rate each aspect on a 1-10 scale. BE SPECIFIC and use the FULL RANGE of scores:
-- Use 1-3 for simple/excellent code
-- Use 4-6 for moderate complexity  
-- Use 7-8 for high complexity
-- Use 9-10 for extremely complex/problematic code
+1. **Semantic Complexity**  
+   • If cyclomatic ≥ 15 ⇒ must be ≥ 7  
+2. **Cognitive Load**  
+   • If loc ≥ 100        ⇒ must be ≥ 6  
+3. **Maintainability**  
+   • If nesting_depth ≥ 5 ⇒ must be ≥ 7  
+4. **Documentation Quality**  
+   • If comment_ratio < 0.08 ⇒ must be ≥ 7  
+5. **Refactoring Urgency**  
+   • If any of the above three thresholds fire **and**
+     maintainability ≥ 8 ⇒ this must be ≥ 8
 
-**IMPORTANT: Functions should receive DIFFERENT scores based on their actual complexity. Avoid giving similar ratings to all functions.**
+Anchor table for interpretation:
 
-1. **Semantic Complexity** (1-10): How difficult is the logic to understand?
-   - 1-3: Simple logic, clear algorithm, minimal domain knowledge needed
-   - 4-6: Moderate logic with some complexity, reasonable algorithm
-   - 7-8: Complex business logic, intricate algorithms, domain expertise needed
-   - 9-10: Extremely complex logic, multiple interacting algorithms, expert-level domain knowledge
+| Band | Semantic Complexity | Cognitive Load | Maintainability | Docs Quality | Refactor Urgency |
+|------|--------------------|----------------|-----------------|--------------|------------------|
+| 1-3  | Straight-line, trivial | Few vars, linear flow | Loose coupling, well-tested | Self-doc / exhaustive | None |
+| 4-6  | Obvious branches / loops | Moderate state tracking | Some coupling | Adequate comments | Low |
+| 7-8  | Multi-path or domain-heavy | Nested states, non-obvious flow | High coupling, risky edits | Sparse / outdated | Needed soon |
+| 9-10 | Multiple interacting algos, reflection, etc. | Interleaved states, callback hell | Tightly coupled, global side-effects | No useful docs | Critical |
 
-2. **Cognitive Load** (1-10): How much mental effort to comprehend?
-   - 1-3: Easy to follow, minimal variable tracking, clear execution flow
-   - 4-6: Some mental effort needed, moderate state tracking
-   - 7-8: High mental effort, complex state management, difficult to trace execution
-   - 9-10: Overwhelming mental effort, too many variables/states to track
+────────────────────────────────────────────
+DESCRIPTION FIELDS  (audience: product owner, QA analyst, architect)
 
-3. **Maintainability** (1-10): How difficult would this be to modify safely?
-   - 1-3: Easy to change, well-isolated, good testability
-   - 4-6: Moderate change difficulty, some coupling
-   - 7-8: Risky to change, high coupling, hard to test
-   - 9-10: Extremely risky to modify, tightly coupled, change impact unpredictable
+• "business_description"  →  ≤ 60 words, zero technical jargon.
+     – Focus on *why* the business person cares and which user-visible feature / workflow this function supports.
+     – Example: "Verifies and logs every coupon a shopper enters at checkout, so discounts are applied correctly and fraud is prevented."
 
-4. **Documentation Quality** (1-10): How well documented is this code?
-   - 1-3: Excellent docs, clear comments, self-documenting
-   - 4-6: Adequate documentation, some gaps
-   - 7-8: Poor documentation, minimal comments
-   - 9-10: No meaningful documentation, completely unclear
+• "developer_description" →  ≤ 60 words, technical but readable by juniors; include cues useful for senior devs fixing tech debt.
+     – Summarise control flow, core data structures, and any well-known external concepts (e.g., ‘Observer pattern’, ‘REST call’).
+     – End with one orientation tip: e.g., “Start reading at the validation loop.”
 
-5. **Refactoring Urgency** (1-10): How urgently does this need refactoring?
-   - 1-3: No refactoring needed, well-structured
-   - 4-6: Minor improvements possible
-   - 7-8: Should be refactored soon, causing some problems
-   - 9-10: Critical refactoring needed immediately, major technical debt
+────────────────────────────────────────────
+SUGGESTIONS FIELD  (exactly three bullets)
 
-6. **Function Descriptions**: Provide two different explanations of what this function does:
-   - **Business Description**: Explain in simple, non-technical terms what business purpose this function serves. Focus on WHAT it accomplishes from a user/business perspective, avoiding technical jargon.
-   - **Developer Description**: Provide a technical explanation of HOW the function works, including key algorithms, data structures, design patterns, and implementation details.
+Return three strings, each starting with an **imperative verb**. and focusing on one of:
 
-**CALIBRATION GUIDANCE:**
-- Look at the structural metrics provided - they give you baseline complexity indicators
-- A function with cyclomatic complexity of 15+ should likely get higher semantic scores
-- Functions with 100+ lines should get higher cognitive load scores
-- Functions with nesting depth 5+ should get higher maintainability concerns
-- Compare this function's complexity to what you'd expect from typical enterprise code
-- If function content is not available, base analysis primarily on the structural metrics provided
+Example output:
+[
+  "Inline comments that clarify nested or non-obvious logic."
+  "Javadoc/KDoc docstrings that describe parameters, side-effects, and return value."
+  "Refactor patterns that reduce complexity or improve separation of concerns (e.g., “Extract validation loop into `CouponValidator` class”)."
+  "Add Javadoc summarising parameters and side-effects.",
+  "Insert inline comment explaining the two-phase regex validation.",
+  "Extract pricing logic into a separate `PriceCalculator` service to cut cyclomatic complexity."
+]
 
-Please respond with ONLY the JSON (no other text):
+────────────────────────────────────────────
+OUTPUT  (JSON ONLY)
+
 {{
-    "semantic_complexity": <number 1-10>,
-    "cognitive_load": <number 1-10>,
-    "maintainability": <number 1-10>,
-    "documentation_quality": <number 1-10>,
-    "refactoring_urgency": <number 1-10>,
-    "explanation": "<2-3 sentence explanation of the main complexity drivers and why you gave these specific scores>",
-    "business_description": "<Simple explanation of what this function does from a business perspective, avoiding technical terms>",
-    "developer_description": "<Technical explanation of how the function works, including key implementation details and patterns>",
-    "suggestions": [
-        "<specific actionable suggestion 1>",
-        "<specific actionable suggestion 2>",
-        "<specific actionable suggestion 3>"
-    ]
+  "semantic_complexity": <int 1-10>,
+  "cognitive_load":      <int 1-10>,
+  "maintainability":     <int 1-10>,
+  "documentation_quality": <int 1-10>,
+  "refactoring_urgency": <int 1-10>,
+  "explanation": "<≈60 words naming specific metrics or code features that drove each score>",
+  "business_description": "<WHAT it does — plain English, no jargon>",
+  "developer_description": "<HOW it works — key algorithms, patterns>",
+  "suggestions": [
+    "<actionable improvement 1>",
+    "<actionable improvement 2>",
+    "<actionable improvement 3>"
+  ]
 }}
 
-Focus on what makes THIS SPECIFIC function more or less complex than average code."""
+────────────────────────────────────────────
+INTERNAL REASONING STEPS  (DO NOT output)
+1. Evidence scan – list metrics & salient code cues.
+2. Map to rubric & apply hard thresholds.
+3. Double-check no dimension violates its bounds.
+4. Compose JSON exactly as specified.
+"""
 
     return prompt
+
+
