@@ -9,6 +9,7 @@ langchain-community
 python-dotenv
 supabase
 pydantic-ai
-pdfminer.six 
+PyMuPDF
+fitz
 requests 
 python-multipart

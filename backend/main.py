@@ -1,5 +1,7 @@
 import os
 import sys
+from fastapi import FastAPI, UploadFile, File
+from dotenv import load_dotenv
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -9,6 +11,7 @@ from analysis import (
     llm_complexity_analyzer,
     supabase_access,
 )
+from pdf_handling import pdf
 # from business_QA import get_business_qa
 # from developer_QA import get_developer_qa
 from fastapi import FastAPI, HTTPException, status
@@ -52,10 +55,76 @@ async def root():
             "/items (POST) - Create new item",
         ],
     }
+    
+
+@app.post("/upload/tll")
+async def upload_to_tll(file: UploadFile = File(...)):
+    load_dotenv(dotenv_path="./.env")
+
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_KEY")
+    result = pdf.process_pdf_and_upload(
+        file.file,
+        table="tll",
+        openai_key=openai_api_key,
+        supabase_url=supabase_url,
+        supabase_key=supabase_key
+    )
+    return result
+
+@app.post("/upload/matrix")
+async def upload_to_matrix(file: UploadFile = File(...)):
+    load_dotenv(dotenv_path="./.env")
+
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_KEY")
+    result = pdf.process_pdf_and_upload(
+        file.file,
+        table="matrix",
+        openai_key=openai_api_key,
+        supabase_url=supabase_url,
+        supabase_key=supabase_key
+    )
+    return result
 
 
 @app.post("/download-repo")
 def download_repo(payload: GitHubRepoRequest):
+    try:
+        url = str(payload.url).rstrip("/")
+        if not url.startswith("https://github.com/"):
+            raise ValueError("Invalid GitHub URL format")
+        dest_path = download_github_repo.download_github_repo_zip(url)
+        complexity_analyzer.main(repo_url=f"{url}/blob/main/")
+        llm_complexity_analyzer.main()
+        supabase_access.upload_function_complexity()
+
+        return {"message": "Repository analised successfully", "path": dest_path}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    
+@app.post("/check-repo")
+def check_repo(payload: GitHubRepoRequest):
+    try:
+        url = str(payload.url).rstrip("/")
+        if not url.startswith("https://github.com/"):
+            raise ValueError("Invalid GitHub URL format")
+        dest_path = download_github_repo.download_github_repo_zip(url)
+        complexity_analyzer.main(repo_url=f"{url}/blob/main/")
+        llm_complexity_analyzer.main()
+        supabase_access.upload_function_complexity()
+
+        return {"message": "Repository analised successfully", "path": dest_path}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+
+
+@app.post("/embedd-repo")
+def embedd_repo(payload: GitHubRepoRequest):
     try:
         url = str(payload.url).rstrip("/")
         if not url.startswith("https://github.com/"):
