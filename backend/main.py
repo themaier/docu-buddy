@@ -105,9 +105,6 @@ def download_repo(payload: GitHubRepoRequest):
         if not url.startswith("https://github.com/"):
             raise ValueError("Invalid GitHub URL format")
         dest_path = download_github_repo.download_github_repo_zip(url)
-        complexity_analyzer.main(repo_url=f"{url}/blob/main/")
-        llm_complexity_analyzer.main()
-        supabase_access.upload_function_complexity()
 
         return {"message": "Repository analised successfully", "path": dest_path}
     except Exception as e:
