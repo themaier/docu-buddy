@@ -9,7 +9,7 @@ langchain-community
 python-dotenv
 supabase
 pydantic-ai
-PyMuPDF
+PyMuPDF==1.22.5
 fitz
 requests 
 python-multipart
