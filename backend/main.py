@@ -71,7 +71,7 @@ def download_repo(payload: GitHubRepoRequest):
             raise ValueError("Invalid GitHub URL format")
         dest_path = download_github_repo.download_github_repo_zip(url)
 
-        return {"message": "Repository analised successfully", "path": dest_path}
+        return {"message": "Repository downloaded and unzipped successfully", "path": dest_path}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -137,7 +137,7 @@ def embedd_repo(payload: GitHubRepoRequest):
             raise ValueError("Invalid GitHub URL format")
         print("Embedd repo.")
 
-        return {"message": "Repository analised successfully", "path": dest_path}
+        return {"message": "Tried embedding repo."}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
