@@ -63,7 +63,6 @@ async def root():
         ],
     }
     
-
 @app.post("/download/repo")
 def download_repo(payload: GitHubRepoRequest):
     try:
@@ -89,7 +88,7 @@ async def upload_to_matrix(file: UploadFile = File(...)):
 @app.get("/check/tll")
 async def check_tll_compliance():
     """
-    Scan ./repo, decide which languages / frameworks are permitted
+    Scan ./repo, decide which frameworks / tools are permitted
     according to the Technische Vorgaben PDF stored in the 'tll' table.
     """
     try:
@@ -104,7 +103,7 @@ async def check_tll_compliance():
 async def check_matrix_compliance():
     """
     Scan ./repo, decide which languages / frameworks are permitted
-    according to the Technische Vorgaben PDF stored in the 'tll' table.
+    according to the License Matrix PDF stored in the 'matrix' table.
     """
     try:
         # result = matrix.check_repo("./repo")
