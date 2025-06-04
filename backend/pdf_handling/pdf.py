@@ -1,5 +1,5 @@
 import uuid
-import fitz  # PyMuPDF
+import pdfplumber  # Replacement for PyMuPDF
 from openai import OpenAI
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -17,16 +17,17 @@ openai_client = OpenAI(api_key=openai_key)
 embedding_model = "text-embedding-ada-002"
 
 def extract_text_from_pdf(file) -> list[str]:
-    """Extract text from a PDF file-like object using PyMuPDF."""
+    """Extract text from a PDF file-like object using pdfplumber."""
     file.seek(0)
-    doc = fitz.open(stream=file.read(), filetype="pdf")
     paragraphs = []
-    for page in doc:
-        blocks = page.get_text("blocks")
-        for block in blocks:
-            text = block[4].strip()
+    with pdfplumber.open(file) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text()
             if text:
-                paragraphs.append(text)
+                for para in text.split('\n'):
+                    clean_para = para.strip()
+                    if clean_para:
+                        paragraphs.append(clean_para)
     return paragraphs
 
 def chunk_text(paragraphs: list[str], max_chars: int = 1000) -> list[str]:
