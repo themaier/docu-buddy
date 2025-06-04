@@ -12,6 +12,7 @@ from analysis import (
     supabase_access,
 )
 from pdf_handling import pdf
+from repo_checker import tll
 # from business_QA import get_business_qa
 # from developer_QA import get_developer_qa
 from fastapi import FastAPI, HTTPException, status
@@ -66,6 +67,18 @@ async def upload_to_tll(file: UploadFile = File(...)):
 async def upload_to_matrix(file: UploadFile = File(...)):
     result = pdf.process_pdf_and_upload(file.file, table="matrix")
     return result
+
+@app.get("/check/tll")
+async def repo_compliance():
+    """
+    Scan ./repo, decide which languages / frameworks are permitted
+    according to the Technische Vorgaben PDF stored in the 'tll' table.
+    """
+    try:
+        result = tll.check_repo("./repo")
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.post("/download-repo")
