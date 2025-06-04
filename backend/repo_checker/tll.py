@@ -8,7 +8,6 @@ import openai
 from supabase import create_client
 import tiktoken
 import os
-import subprocess
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
@@ -252,10 +251,7 @@ def list_excluded_files_with_links(
 
     return url_map
 
-
-
-
-def _insert_supabase(
+def insert_supabase(
     link_map: Dict[str, List[str]],          # {".vue": [url1, url2], ...}
     *,
     table: str = "disallowed_files",
@@ -281,13 +277,6 @@ def _insert_supabase(
 
 if __name__ == "__main__":
     REPO_PATH         = "./repo"
-    OUTPUT_EXCLUDED   = True          # <- toggle to print the link list
-    OUTPUT_JSON_LINKS = False         # <- toggle JSON vs pretty print
-
-    if OUTPUT_EXCLUDED:
-        link_map = list_excluded_files_with_links(REPO_PATH, include_ignored=False)
-        inserted = _insert_supabase(link_map)
-        if OUTPUT_JSON_LINKS:
-            print(json.dumps(link_map, indent=2, ensure_ascii=False))
-        else:
-            pprint(link_map, width=120, sort_dicts=False)
+    link_map = list_excluded_files_with_links(REPO_PATH, include_ignored=False)
+    inserted = insert_supabase(link_map)
+    print(json.dumps(link_map, indent=2, ensure_ascii=False))

@@ -2,6 +2,7 @@ import os
 import sys
 from fastapi import FastAPI, UploadFile, File
 from dotenv import load_dotenv
+import json
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -13,9 +14,10 @@ from analysis import (
 )
 from pdf_handling import pdf
 from repo_checker import tll
+from repo_checker import matrix
 # from business_QA import get_business_qa
 # from developer_QA import get_developer_qa
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
 
@@ -69,13 +71,28 @@ async def upload_to_matrix(file: UploadFile = File(...)):
     return result
 
 @app.get("/check/tll")
-async def repo_compliance():
+async def check_tll_compliance():
     """
     Scan ./repo, decide which languages / frameworks are permitted
     according to the Technische Vorgaben PDF stored in the 'tll' table.
     """
     try:
-        result = tll.check_repo("./repo")
+        link_map = tll.list_excluded_files_with_links("./repo", include_ignored=False)
+        tll.insert_supabase(link_map)
+        return json.dumps(link_map, indent=2, ensure_ascii=False)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    
+
+@app.get("/check/matrix")
+async def check_matrix_compliance():
+    """
+    Scan ./repo, decide which languages / frameworks are permitted
+    according to the Technische Vorgaben PDF stored in the 'tll' table.
+    """
+    try:
+        # result = matrix.check_repo("./repo")
+        result = ""
         return result
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
