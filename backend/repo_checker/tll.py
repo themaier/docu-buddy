@@ -7,6 +7,10 @@ from typing import Dict, List, Tuple
 import openai
 from supabase import create_client
 import tiktoken
+import os
+import subprocess
+from pathlib import Path
+from typing import Dict, List, Set, Tuple
 
 
 # ── env / config ──────────────────────────────────────────────────────────── #
@@ -135,7 +139,7 @@ IGNORE_TERMS = {
     "svg", "image", "archive",
     "sha256", "checksum", "temporary",
     "json schema", "interpreter", "text",
-    "shell", "batch", "xlst",
+    "shell", "batch", "2",
 }
 
 def _is_ignored(ext: str, lang: str) -> bool:
@@ -182,16 +186,109 @@ def categorise(repo_path: str = "./repo") -> Dict[str, List[Tuple[str, str]]]:
         "used_and_allowed":     used_and_allowed,
         "used_but_not_allowed": used_but_not_allowed,
     }
+    
+
+def _collect_files_with_exts(repo_path: str, exts: Set[str]) -> List[Path]:
+    """Return every file under repo_root whose extension is in `exts`."""
+    matches: List[Path] = []
+    for root, _, files in os.walk(repo_path):
+        for fn in files:
+            if Path(fn).suffix.lower() in exts:
+                matches.append(Path(root, fn).resolve())
+    return matches
 
 
-# ── 5. minimal runner ─────────────────────────────────────────────────────── #
+def list_excluded_files_with_links(
+    repo_path: str = "./repo",
+    include_ignored: bool = False,
+) -> Dict[str, List[str]]:
+    """
+    1. Runs `categorise(repo_path)` to identify excluded extensions.  
+       • Always includes 'used_but_not_allowed'.  
+       • Optionally also includes 'ignored' when `include_ignored=True`.
+    2. Finds every file with those extensions and converts the path to a
+       GitHub URL of the form:
+           https://github.com/USER/REPO/blob/BRANCH/rel/path/to/file
+
+    Returns a mapping:
+        {
+            ".vue": [
+                "https://github.com/USER/REPO/blob/main/src/App.vue",
+                ...
+            ],
+            ".csv": [
+                ...
+            ]
+        }
+    """
+    report          = categorise(repo_path)
+    excluded_buckets = ["used_but_not_allowed"]
+    if include_ignored:
+        excluded_buckets.append("ignored")
+
+    # gather the set of excluded extensions (lower-case, leading dot)
+    excluded_exts: Set[str] = {
+        ext.lower()
+        for bucket in excluded_buckets
+        for ext, _ in report.get(bucket, [])
+    }
+
+    if not excluded_exts:
+        return {}
+
+    # collect files & build URLs
+    remote_base, branch = "https://github.com/openrewrite/rewrite", "main"
+    repo_root           = Path(repo_path).resolve()
+    url_map: Dict[str, List[str]] = {ext: [] for ext in excluded_exts}
+
+    for path in _collect_files_with_exts(repo_path, excluded_exts):
+        rel_path = path.relative_to(repo_root).as_posix()
+        url      = f"{remote_base}/blob/{branch}/{rel_path}"
+        url_map[path.suffix.lower()].append(url)
+
+    # keep deterministic ordering
+    for urls in url_map.values():
+        urls.sort()
+
+    return url_map
+
+
+
+
+def _insert_supabase(
+    link_map: Dict[str, List[str]],          # {".vue": [url1, url2], ...}
+    *,
+    table: str = "disallowed_files",
+) -> int:
+    """
+    Flatten `link_map` and push rows {file_url, extension, name} to Supabase.
+
+    • `name` is looked up once per extension via `_infer_lang_from_ext`.  
+    • No dedup / upsert – runs the simplest possible `.insert()` call.
+    """
+    sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+    # Build an extension → language cache so we don’t hit the LLM repeatedly
+    ext_lang = {ext: _infer_lang_from_ext(ext) for ext in link_map}
+
+    rows = [
+        {"file_url": url, "extension": ext, "name": ext_lang[ext]}
+        for ext, urls in link_map.items()
+        for url in urls
+    ]
+
+    sb.table(table).insert(rows).execute()
+    return len(rows)
+
 if __name__ == "__main__":
-    # <<< EDIT THESE TWO LINES ONLY >>> ------------------------------------- #
-    REPO_PATH   = "./repo"   # folder you want to scan
-    OUTPUT_JSON = False      # True → raw JSON, False → pretty-print
-    # ----------------------------------------------------------------------- #
-    result = categorise(REPO_PATH)
-    if OUTPUT_JSON:
-        print(json.dumps(result, ensure_ascii=False))
-    else:
-        pprint(result, width=100, sort_dicts=False)
+    REPO_PATH         = "./repo"
+    OUTPUT_EXCLUDED   = True          # <- toggle to print the link list
+    OUTPUT_JSON_LINKS = False         # <- toggle JSON vs pretty print
+
+    if OUTPUT_EXCLUDED:
+        link_map = list_excluded_files_with_links(REPO_PATH, include_ignored=False)
+        inserted = _insert_supabase(link_map)
+        if OUTPUT_JSON_LINKS:
+            print(json.dumps(link_map, indent=2, ensure_ascii=False))
+        else:
+            pprint(link_map, width=120, sort_dicts=False)
