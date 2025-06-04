@@ -1,7 +1,18 @@
 import uuid
 import fitz  # PyMuPDF
 from openai import OpenAI
-import requests
+from supabase import create_client, Client
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_KEY")
+openai_key = os.getenv("OPENAI_API_KEY")
+
+supabase: Client = create_client(supabase_url, supabase_key)
+openai_client = OpenAI(api_key=openai_key)
 
 embedding_model = "text-embedding-ada-002"
 
@@ -9,8 +20,13 @@ def extract_text_from_pdf(file) -> list[str]:
     """Extract text from a PDF file-like object using PyMuPDF."""
     file.seek(0)
     doc = fitz.open(stream=file.read(), filetype="pdf")
-    text = "\n".join([page.get_text() for page in doc])
-    paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
+    paragraphs = []
+    for page in doc:
+        blocks = page.get_text("blocks")
+        for block in blocks:
+            text = block[4].strip()
+            if text:
+                paragraphs.append(text)
     return paragraphs
 
 def chunk_text(paragraphs: list[str], max_chars: int = 1000) -> list[str]:
@@ -27,45 +43,36 @@ def chunk_text(paragraphs: list[str], max_chars: int = 1000) -> list[str]:
         chunks.append(chunk.strip())
     return chunks
 
-def get_embedding(text: str, openai_client: OpenAI) -> list[float]:
-    """Get embedding using passed OpenAI client."""
+def get_embedding(text: str) -> list[float]:
+    """Get embedding using OpenAI client."""
     response = openai_client.embeddings.create(
         input=text,
         model=embedding_model
     )
     return response.data[0].embedding
 
-def insert_to_supabase(supabase_url: str, supabase_key: str, table: str, content: str, embedding: list[float]) -> requests.Response:
-    """Insert text and embedding to Supabase."""
-    url = f"{supabase_url}/rest/v1/{table}"
-    headers = {
-        "apikey": supabase_key,
-        "Authorization": f"Bearer {supabase_key}",
-        "Content-Type": "application/json"
-    }
-    payload = {
+def insert_to_supabase(table: str, content: str, embedding: list[float]):
+    """Insert text and embedding to Supabase using supabase.Client."""
+    data = {
         "id": str(uuid.uuid4()),
         "content": content,
         "embedding": embedding
     }
-    return requests.post(url, headers=headers, json=payload)
+    response = supabase.table(table).insert(data).execute()
+    return response
 
-def process_pdf_and_upload(file, table: str, openai_key: str, supabase_url: str, supabase_key: str) -> dict:
-    """Orchestrates full pipeline from PDF to Supabase."""
+def process_pdf_and_upload(file, table: str) -> dict:
+    """Main orchestration: extract text, embed, and upload to Supabase."""
     paragraphs = extract_text_from_pdf(file)
     chunks = chunk_text(paragraphs)
     uploaded = 0
 
-    print("---")
-    print(openai_key)
-    print("---")
-    client = OpenAI(api_key=openai_key)
-
     for chunk in chunks:
-        embedding = get_embedding(chunk, client)
-        res = insert_to_supabase(supabase_url, supabase_key, table, chunk, embedding)
-        if not res.ok:
-            return {"error": res.text}
+        embedding = get_embedding(chunk)
+        res = insert_to_supabase(table, chunk, embedding)
+
+        if res.status_code >= 400:
+            return {"error": res.data}
         uploaded += 1
 
     return {
