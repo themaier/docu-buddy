@@ -9,3 +9,6 @@ langchain-community
 python-dotenv
 supabase
 pydantic-ai
+pdfminer.six 
+requests 
+python-multipart
