@@ -267,16 +267,15 @@ def _insert_supabase(
     • No dedup / upsert – runs the simplest possible `.insert()` call.
     """
     sb = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-    # Build an extension → language cache so we don’t hit the LLM repeatedly
+    sb.table(table).delete().neq("id", 0).execute()
     ext_lang = {ext: _infer_lang_from_ext(ext) for ext in link_map}
-
     rows = [
         {"file_url": url, "extension": ext, "name": ext_lang[ext]}
         for ext, urls in link_map.items()
         for url in urls
     ]
 
+    # 4️⃣  push the fresh data
     sb.table(table).insert(rows).execute()
     return len(rows)
 

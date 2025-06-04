@@ -48,7 +48,7 @@ def upload_function_complexity():
             "llm_suggestions": json.dumps(item["llm_analysis"]["suggestions"]),
         }
         records.append(record)
-
+    supabase.table("function_complexity").delete().neq("id", 0).execute()
     response = supabase.table("function_complexity").insert(records).execute()
     print("Insert response:", response)
 

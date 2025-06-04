@@ -79,8 +79,10 @@ def _insert_supabase(chunks: List[str],
                      table: str) -> int:
     """Write (content, embedding) rows to Supabase."""
     sb = create_client(SUPABASE_URL, SUPABASE_KEY)
-    rows = [{"content": c, "embedding": e} for c, e in zip(chunks, embeddings)]
-    _ = sb.table(table).insert(rows).execute()
+    sb.table(table).delete().neq("id", 0).execute()
+    rows = [{"content": c, "embedding": e}
+            for c, e in zip(chunks, embeddings)]
+    sb.table(table).insert(rows).execute()
     return len(rows)
 
 
