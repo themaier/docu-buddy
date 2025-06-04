@@ -59,6 +59,18 @@ async def root():
         ],
     }
     
+    
+@app.post("/download/repo")
+def download_repo(payload: GitHubRepoRequest):
+    try:
+        url = str(payload.url).rstrip("/")
+        if not url.startswith("https://github.com/"):
+            raise ValueError("Invalid GitHub URL format")
+        dest_path = download_github_repo.download_github_repo_zip(url)
+
+        return {"message": "Repository analised successfully", "path": dest_path}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/upload/tll")
 async def upload_to_tll(file: UploadFile = File(...)):
@@ -96,19 +108,6 @@ async def check_matrix_compliance():
         return result
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-
-
-@app.post("/download/repo")
-def download_repo(payload: GitHubRepoRequest):
-    try:
-        url = str(payload.url).rstrip("/")
-        if not url.startswith("https://github.com/"):
-            raise ValueError("Invalid GitHub URL format")
-        dest_path = download_github_repo.download_github_repo_zip(url)
-
-        return {"message": "Repository analised successfully", "path": dest_path}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
     
     
 @app.post("/check/repo-complexity")
@@ -126,7 +125,6 @@ def check_repo(payload: GitHubRepoRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
     
-
 
 @app.post("/embedd/repo")
 def embedd_repo(payload: GitHubRepoRequest):
