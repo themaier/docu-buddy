@@ -98,7 +98,7 @@ async def check_matrix_compliance():
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@app.post("/download-repo")
+@app.post("/download/repo")
 def download_repo(payload: GitHubRepoRequest):
     try:
         url = str(payload.url).rstrip("/")
@@ -111,7 +111,7 @@ def download_repo(payload: GitHubRepoRequest):
         raise HTTPException(status_code=400, detail=str(e))
     
     
-@app.post("/check-repo")
+@app.post("/check/repo-complexity")
 def check_repo(payload: GitHubRepoRequest):
     try:
         url = str(payload.url).rstrip("/")
@@ -128,16 +128,13 @@ def check_repo(payload: GitHubRepoRequest):
     
 
 
-@app.post("/embedd-repo")
+@app.post("/embedd/repo")
 def embedd_repo(payload: GitHubRepoRequest):
     try:
         url = str(payload.url).rstrip("/")
         if not url.startswith("https://github.com/"):
             raise ValueError("Invalid GitHub URL format")
-        dest_path = download_github_repo.download_github_repo_zip(url)
-        complexity_analyzer.main(repo_url=f"{url}/blob/main/")
-        llm_complexity_analyzer.main()
-        supabase_access.upload_function_complexity()
+        print("Embedd repo.")
 
         return {"message": "Repository analised successfully", "path": dest_path}
     except Exception as e:
