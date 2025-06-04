@@ -65,7 +65,7 @@ async def upload_to_tll(file: UploadFile = File(...)):
     result = pdf.process_pdf_and_upload(file.file, table="tll")
     return result
 
-@app.post("/upload/matrix")
+@app.post("/upload/licenses")
 async def upload_to_matrix(file: UploadFile = File(...)):
     result = pdf.process_pdf_and_upload(file.file, table="matrix")
     return result
@@ -84,7 +84,7 @@ async def check_tll_compliance():
         raise HTTPException(status_code=500, detail=str(exc))
     
 
-@app.get("/check/matrix")
+@app.get("/check/licenses")
 async def check_matrix_compliance():
     """
     Scan ./repo, decide which languages / frameworks are permitted
